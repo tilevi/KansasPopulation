@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html>
+    <meta charset="utf-8">
+    
+    <style type="text/css">
+        svg {
+          font: 10px sans-serif;
+        }
+
+        .caption {
+          font-weight: bold;
+        }
+
+        .key path {
+          display: none;
+        }
+
+        .key line {
+          stroke: #000;
+          shape-rendering: crispEdges;
+        }
+
+        .county-border {
+          fill: none;
+          stroke: #000;
+          stroke-opacity: .3;
+        }
+        
+        .tract-border {
+            fill: none;
+            stroke: #000;
+            stroke-opacity: .3;
+        }
+        
+        .state-border {
+            fill: none;
+            stroke: #000;
+            stroke-opacity: 1;
+        }
+        
+        .opt {
+            position: absolute;
+            left: 455px;
+        }
+    </style>
+
+    <body>
+        <script src="http://d3js.org/d3.v3.min.js" type="text/javascript"></script>
+        <script src="http://d3js.org/topojson.v1.min.js" type="text/javascript"></script>
+        
+        <h1><center><bold>Kansas Population Density, 2014</bold></center></h1>
+        
+        <script type="text/javascript">
+
+            var width = 960,
+                height = 580;
+
+            var formatNumber = d3.format(",d");
+
+            var path = d3.geo.path()
+                .projection(null);
+            
+            var scheme = false;
+            var color = d3.scale.threshold()
+                        .domain([1, 10, 50, 100, 500, 1000, 2000, 5000])
+                        .range(["#fff7ec", "#fee8c8", "#fdd49e", "#fdbb84", "#fc8d59", "#ef6548", "#d7301f", "#b30000", "#7f0000"]);
+
+            // A position encoding for the key only.
+            var x = d3.scale.linear()
+                .domain([0, 5100])
+                .range([0, 500]);
+
+            var xAxis = d3.svg.axis()
+                .scale(x)
+                .orient("bottom")
+                .tickSize(13)
+                .tickValues(color.domain())
+                .tickFormat(function(d) { return d >= 100 ? formatNumber(d) : null; });
+
+            var svg = d3.select("body").append("svg")
+                .attr("width", width)
+                .attr("height", height);
+
+            var g = svg.append("g")
+                .attr("class", "key")
+                .attr("transform", "translate(450,550)");
+            
+            g.selectAll("rect")
+            .data(color.range().map(function(d, i) {
+              return {
+                x0: i ? x(color.domain()[i - 1]) : x.range()[0],
+                x1: i < color.domain().length ? x(color.domain()[i]) : x.range()[1],
+                z: d
+              };
+            }))
+            .enter().append("rect")
+            .attr("height", 8)
+            .attr("x", function(d) { return d.x0; })
+            .attr("width", function(d) { return d.x1 - d.x0; })
+            .style("fill", function(d) { return d.z; });
+
+            g.call(xAxis).append("text")
+                .attr("class", "caption")
+                .attr("y", -6)
+                .text("Population per square mile");
+            
+            var tracts = null;
+            var kansas = null
+            
+            d3.json("ks.json", function(error, ks) {
+              if (error) throw error;
+              
+              kansas = ks;
+              tracts = topojson.feature(ks, ks.objects.tracts);
+
+              // Clip tracts to land.
+              svg.append("defs").append("clipPath")
+                  .attr("id", "clip-land")
+                .append("path")
+                  .datum(topojson.feature(ks, ks.objects.counties))
+                  .attr("d", path);
+
+              // Group tracts by color for faster rendering.
+              svg.append("g")
+                  .attr("class", "tract")
+                  .attr("clip-path", "url(#clip-land)")
+                .selectAll("path")
+                  .data(d3.nest()
+                    .key(function(d) { return color(d.properties.population / d.properties.area * 2.58999e6); })
+                    .entries(tracts.features.filter(function(d) { return d.properties.area; })))
+                .enter().append("path")
+                  .style("fill", function(d) { return d.key; })
+                  .attr("d", function(d) { return path({type: "FeatureCollection", features: d.values}); });
+
+              // Draw county borders.
+              svg.append("path")
+                  .datum(topojson.mesh(ks, ks.objects.counties, function(a, b) { return a !== b; }))
+                  .attr("class", "county-border")
+                  .attr("d", path);
+            });
+        
+            var reload = function() {
+                
+                g.selectAll("rect").remove();
+                
+                g.selectAll("rect")
+                    .data(color.range().map(function(d, i) {
+                      return {
+                        x0: i ? x(color.domain()[i - 1]) : x.range()[0],
+                        x1: i < color.domain().length ? x(color.domain()[i]) : x.range()[1],
+                        z: d
+                      };
+                    }))
+                    .enter().append("rect")
+                    .attr("height", 8)
+                    .attr("x", function(d) { return d.x0; })
+                    .attr("width", function(d) { return d.x1 - d.x0; })
+                    .style("fill", function(d) { return d.z; });
+                
+                
+
+                  svg.select("defs").select("clipPath").select("path").remove();
+                  svg.select("defs").select("clipPath").remove();
+                  svg.select("defs").remove();
+                
+                  d3.select(".tract").selectAll("path").remove();
+
+                  d3.select(".county-border").remove();
+                    
+                    svg.append("defs").append("clipPath")
+                  .attr("id", "clip-land")
+                .append("path")
+                  .datum(topojson.feature(kansas, kansas.objects.counties))
+                  .attr("d", path);
+                    
+                  svg.append("g")
+                  .attr("class", "tract")
+                  .attr("clip-path", "url(#clip-land)")
+                .selectAll("path")
+                  .data(d3.nest()
+                    .key(function(d) { return color(d.properties.population / d.properties.area * 2.58999e6); })
+                    .entries(tracts.features.filter(function(d) { return d.properties.area; })))
+                .enter().append("path")
+                  .style("fill", function(d) { return d.key; })
+                  .attr("d", function(d) { return path({type: "FeatureCollection", features: d.values}); });
+                
+                    // Draw county borders.
+                    svg.append("path")
+                        .datum(topojson.mesh(kansas, kansas.objects.counties, function(a, b) { return a !== b; }))
+                        .attr("class", "county-border")
+                        .attr("d", path);
+            }
+            
+            // Initially do not show tracts
+            var tractToggle = false;
+            
+            var toggleTracts = function() {
+                
+                tractToggle = !tractToggle;
+                
+                if (tractToggle) {
+                    svg.append("path")
+                        .datum(topojson.mesh(kansas, kansas.objects.tracts, function(a, b) { return a !== b; }))
+                        .attr("class", "tract-border")
+                        .attr("d", path);
+                } else {
+                    d3.selectAll(".tract-border").remove();
+                }
+            }
+            
+            var stateToggle = false;
+            
+            var toggleState = function() {
+                
+                stateToggle = !stateToggle;
+                
+                if (stateToggle) {
+                    svg.append("path")
+                        .datum(topojson.mesh(kansas, kansas.objects.counties, function(a, b) { return a === b; }))
+                        .attr("class", "state-border")
+                        .attr("d", path);
+                } else {
+                    d3.selectAll(".state-border").remove();
+                }
+            }
+            var switchColor = function(force) {
+                
+                var shm = force;
+                
+                if (force == null) {
+                    scheme = !scheme;
+                    shm = scheme;
+                }
+                
+                if (shm) {
+                    color.domain([1, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000])
+                    .range(["#FFFFFF", "#FFE0E0", "#FFADAD", "#FF7A7A", "#FF4747", "#FF1414", "#E00000", "#AD0000","#7A0000","#610000", "#2E0000"]);
+                } else {
+                    color.domain([1, 10, 50, 100, 500, 1000, 2000, 5000])
+                        .range(["#fff7ec", "#fee8c8", "#fdd49e", "#fdbb84", "#fc8d59", "#ef6548", "#d7301f", "#b30000", "#7f0000"]);
+                }
+                
+                
+                xAxis.tickValues(color.domain());
+                
+                if (scheme) {
+                    xAxis.tickFormat(function(d) { return d >= 250 ? formatNumber(d) : null; });
+                } else {
+                    xAxis.tickFormat(function(d) { return d >= 100 ? formatNumber(d) : null; });
+                }
+                g.call(xAxis);
+                reload();
+            }
+                
+            d3.select(self.frameElement).style("height", height + "px");
+        </script>
+        <br>
+        
+        <div class="opt">
+            <button onclick="switchColor();">Change legend color</button>
+
+            <button style="display: in-line block;" onclick="toggleTracts();">Toggle tract boundaries</button>
+
+            <button onclick="toggleState();">Toggle state boundary</button>
+        </div>
+        
+        <p><h3>Tristan Iverson</h3>
+            <h3>Instructor: Suresh Lodha</h3>
+            <h3>CMPS 165: Data programming for Visualization</h3>
+            <h3>Fall 2016</h3>
+        </p>
+    </body>
+</html>
